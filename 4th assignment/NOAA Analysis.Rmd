@@ -1,0 +1,130 @@
+---
+title: "Analysis on most harmful and most damaging natural disasters in the US"
+author: "Romain de Ganay"
+date: "20 novembre 2016"
+output: html_document
+---
+
+## Synopsis
+
+This project involves exploring the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage.   
+The data can be downloaded here:  
+<https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2>
+  
+We will provide answers to the following questions:
+
+* Across the United States, which types of events (as indicated in the 𝙴𝚅𝚃𝚈𝙿𝙴 variable) are most harmful with respect to population health?
+
+* Across the United States, which types of events have the greatest economic consequences?
+
+We use the following packages:
+```{r results='hide'}
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+```
+
+## Data Processing
+
+We only keep the following variables:
+
+* **EVTYPE**: the type of natural event
+
+* **FATALITIES**: number of deaths associated with the event
+
+* **INJURIES**: number of injuries associated with the event
+  
+* **PROPDMG**: property damages (to be multiplied by PROPDMGEXP)
+
+* **PROPDMGEXP**: multiplier for property damages
+
+* **CROPDMG**: crop damages (to be multiplied by PROPDMGEXP)
+
+* **CROPDMGEXP**: multiplier to crop damages  
+
+The data for this assignment is located on this repository and is read into R:
+```{r}
+NOAA <- read.csv("repdata%2Fdata%2FStormData.csv.bz2")
+NOAA_light <- select(NOAA, EVTYPE, FATALITIES, INJURIES, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP)
+rm(NOAA)
+
+```
+
+## Results
+
+### Events that are most harmful on population health
+Let us begin by focusing on the natural disasters causing the most deaths and injuries on the American population. 
+```{r}
+NOAA_population <- select(NOAA_light, EVTYPE, FATALITIES, INJURIES)
+
+fatalities <- NOAA_population %>% select(EVTYPE, FATALITIES) %>% group_by(EVTYPE) %>% summarize_each(funs(sum))
+fatalities <- fatalities[with(fatalities, order(-FATALITIES)), ]
+fatalities <- fatalities[1:10,]
+
+injuries <- NOAA_population %>% select(EVTYPE, INJURIES) %>% group_by(EVTYPE) %>% summarize_each(funs(sum))
+injuries <- injuries[with(injuries, order(-INJURIES)), ]
+injuries <- injuries[1:10,]
+
+g1 <- ggplot(data = fatalities, aes(x=reorder(EVTYPE, -FATALITIES), y=FATALITIES)) + geom_bar(stat = "identity", fill = "red") +
+  ggtitle("Most deadly natural disasters in the US") + 
+  xlab("TYPE OF NATURAL EVENT") 
+
+g2 <- ggplot(data = injuries, aes(x=reorder(EVTYPE, -INJURIES), y=INJURIES)) + geom_bar(stat = "identity", fill = "blue") +
+  ggtitle("Most harmful natural disasters in the US") + 
+  xlab("TYPE OF NATURAL EVENT")
+
+require(gridExtra)
+plot1 <- qplot(1)
+plot2 <- qplot(1)
+grid.arrange(g1, g2, nrow=2)
+
+```
+
+### Events that are most costly
+
+Based on the available data, we chose to calculate for each event the sum of the property and crop damage. In order to make this calculation, the "EXP" column associated to each type of damage must be converted into a number.   
+With the method, lines were the "EXP" is not a K, M or B will be ignored.  
+The conversion is done with the following function:
+```{r results='hide'}
+KMB <- function(x) {
+  
+    if(x == 'K') {
+      x <- 1000
+    } else if(x == 'M') {
+      x <- 1000000
+    } else if(x == 'B') {
+      x <- 1000000000
+    } else {
+      x <- 0
+    }
+}
+
+```
+
+We now calculate total damages for each event, and group the data according to the event type. As done previously, we keep the 10 most damaging types of events. 
+
+```{r}
+
+NOAA_dmg <- select(NOAA_light, EVTYPE, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP)
+
+NOAA_dmg <- subset(NOAA_dmg, PROPDMGEXP %in% c("K", "M","B") | CROPDMGEXP %in% c("K", "M","B") )
+NOAA_dmg$PROPDMGEXP <- sapply(NOAA_dmg$PROPDMGEXP, KMB)
+NOAA_dmg$CROPDMGEXP <- sapply(NOAA_dmg$CROPDMGEXP, KMB)
+NOAA_dmg <- mutate(NOAA_dmg, TOTALDMG = CROPDMG*CROPDMGEXP + PROPDMG*PROPDMGEXP)
+
+
+damages <- NOAA_dmg %>% select(EVTYPE, TOTALDMG) %>% group_by(EVTYPE) %>% summarize_each(funs(sum))
+damages <- damages[with(damages, order(-TOTALDMG)), ]
+damages <- damages[1:10,]
+
+g3 <- ggplot(data = damages, aes(x=reorder(EVTYPE, -TOTALDMG), y=TOTALDMG)) + geom_bar(stat = "identity", fill = "red") +
+  ggtitle("Most damaging natural disasters in the US") + 
+  xlab("TYPE OF NATURAL EVENT") +
+  ylab("TOTAL DAMAGES in US$")
+print(g3)
+```
+
+It is interesting to point out that the types of natural events causing material damages are very different from events causing human casualties. 
+
+
+
